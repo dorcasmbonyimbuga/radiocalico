@@ -1,0 +1,27 @@
+# Dependencies are installed inside the image
+node_modules
+npm-debug.log*
+
+# Local runtime data and secrets
+data
+*.db
+*.db-shm
+*.db-wal
+.env
+.env.*
+!.env.example
+
+# Not needed at runtime
+test
+coverage
+.git
+.gitignore
+.vscode
+.idea
+.claude
+*.md
+
+# Docker files themselves
+Dockerfile
+.dockerignore
+compose.yaml
