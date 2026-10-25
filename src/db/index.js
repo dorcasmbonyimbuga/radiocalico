@@ -16,6 +16,17 @@ export function sqliteVersion() {
   return db.prepare('SELECT sqlite_version() AS version').get().version;
 }
 
+// Tracked locally: DatabaseSync#isOpen only exists from Node 22.15 (undefined on older 22.x)
+let open = true;
+
+// Idempotent close, safe to call several times (e.g. on repeated shutdown signals)
 export function closeDb() {
-  if (db.isOpen) db.close();
+  if (!open) return;
+  open = false;
+  try {
+    db.close();
+  } catch (err) {
+    // Already closed elsewhere through db.close(): nothing left to do
+    if (err.code !== 'ERR_INVALID_STATE') throw err;
+  }
 }
