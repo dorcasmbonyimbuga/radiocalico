@@ -1,3 +1,4 @@
 node_modules/
-data/
+# Local SQLite database (root only; src/data/ holds source code)
+/data/
 .env
