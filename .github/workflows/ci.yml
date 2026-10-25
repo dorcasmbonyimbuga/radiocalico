@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# Least privilege: the jobs only need to read the repository
+permissions:
+  contents: read
+
+# Cancel superseded runs for the same branch or pull request
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Tests (Node.js ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        # Minimum supported version (package.json "engines") and the version used in the Docker image
+        node-version: ['22.13', '24']
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests with coverage
+        run: npm run test:coverage
+
+  docker:
+    name: Docker image smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: test
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v5
+
+      - name: Build the image
+        run: docker build --tag radiocalico:ci .
+
+      - name: Start a container
+        # Plain HTTP in CI, so secure cookies are disabled
+        run: |
+          docker run --detach --name radiocalico --publish 3000:3000 \
+            --env COOKIE_SECURE=false \
+            --volume radiocalico-data:/data \
+            radiocalico:ci
+
+      - name: Wait for the health check
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl --silent --fail http://localhost:3000/api/health; then
+              echo
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "The server did not become healthy in time" >&2
+          exit 1
+
+      - name: Check that the database is written to the volume
+        run: |
+          curl --silent --fail http://localhost:3000/api/now-playing > /dev/null
+          docker exec radiocalico ls -l /data/radiocalico.db
+
+      - name: Show container logs
+        if: always()
+        run: docker logs radiocalico || true
